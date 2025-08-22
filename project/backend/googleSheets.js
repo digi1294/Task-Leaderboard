@@ -3,7 +3,7 @@
 const { google } = require('googleapis');
 require('dotenv').config();
 
-const CREDENTIALS_PATH = './credentials.json';
+const CREDENTIALS_PATH = './google-sheets-credentials';
 const SPREADSHEET_ID = process.env.GOOGLE_SHEET_ID;
 
 // --- THIS IS THE FIX ---
