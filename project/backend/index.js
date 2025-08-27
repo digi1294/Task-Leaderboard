@@ -8,6 +8,12 @@ const { getSheetData } = require('./googleSheets');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// This is a simple "route" handler for the homepage.
+// It tells the server what to do when someone visits the main URL.
+app.get('/', (req, res) => {
+  res.send('<h1>Success!</h1><p>Your Leaderboard application is running on Google Cloud!</p>');
+});
+
 app.use(cors());
 app.use(express.json());
 
