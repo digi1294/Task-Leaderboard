@@ -1,5 +1,5 @@
 // The ONLY change is on this line. We are now pointing to the correct backend server.
-const API_BASE_URL = 'http://localhost:3001/api';
+const API_BASE_URL = 'http://34.131.26.18:3001/api';
 
 interface ApiResponse<T> {
   success: boolean;
@@ -54,25 +54,31 @@ class ApiService {
     }
   }
 
-  async getLeaderboardData(): Promise<LeaderboardData> {
-    try {
-      // This now correctly calls http://localhost:3001/api/leaderboard
-      const response = await this.fetchWithTimeout(`${API_BASE_URL}/leaderboard`);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
+// Corrected version
+async getLeaderboardData(): Promise<LeaderboardData> {
+  try {
+    const response = await this.fetchWithTimeout(`${API_BASE_URL}/leaderboard`);
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
 
-      // The frontend expects the JSON to have a specific structure.
-      // We will now modify the backend to provide it.
-      const result = await response.json();
-      return result;
+    // Tell TypeScript what kind of response to expect
+    const result: ApiResponse<LeaderboardData> = await response.json();
 
-    } catch (error) {
-      console.error('API Error:', error);
-      throw new Error(`Failed to fetch leaderboard data: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
+    // Check the 'success' flag from our backend and make sure 'data' exists
+    if (result.success && result.data) {
+      return result.data; // <-- This is the fix! We return the nested data.
+    } else {
+      // Throw an error if the API reports a failure
+      throw new Error(result.message || 'API returned an unsuccessful response');
+    }
+
+  } catch (error) {
+    console.error('API Error:', error);
+    throw new Error(`Failed to fetch leaderboard data: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
 
   // The rest of the file remains the same for now...
   async refreshData(): Promise<LeaderboardData> {
