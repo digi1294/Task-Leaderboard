@@ -1,22 +1,42 @@
 // backend/googleSheets.js
 
+// This line imports the googleapis library, which is needed to interact with Google services.
 const { google } = require('googleapis');
+
+// This line imports and configures the `dotenv` library.
+// It allows us to use a `.env` file to securely store environment variables
+// like your Spreadsheet ID, so they aren't hardcoded in the source code.
 require('dotenv').config();
 
-const CREDENTIALS_PATH = './google-sheets-credentials';
+// --- CONFIGURATION ---
+// The following settings are loaded from your `.env` file, which you must create on the server.
+// See the instructions below the code block.
+
+// The path to your service account key file. We've been using 'credentials.json'.
+const CREDENTIALS_PATH = './credentials.json';
+
+// Your unique Google Spreadsheet ID. This is loaded from the .env file.
 const SPREADSHEET_ID = process.env.GOOGLE_SHEET_ID;
 
-// --- THIS IS THE FIX ---
-// We add a check to make sure SHEET_NAMES exists in the .env file.
+// A comma-separated list of sheet names you want to read (e.g., "Sheet1,Players").
 const SHEET_NAMES_STR = process.env.SHEET_NAMES;
-if (!SHEET_NAMES_STR) {
-    throw new Error("FATAL ERROR: SHEET_NAMES is not defined in your .env file. Please add it, for example: SHEET_NAMES=Sheet1,Sheet2");
+// --- END CONFIGURATION ---
+
+
+// We check to make sure the required environment variables exist. If not, the app will stop with a helpful error.
+if (!SPREADSHEET_ID || !SHEET_NAMES_STR) {
+  throw new Error("FATAL ERROR: GOOGLE_SHEET_ID and/or SHEET_NAMES are not defined in the .env file.");
 }
-// If the variable exists, we split it into an array and trim whitespace from each name.
+
+// We split the string of sheet names into an array for the API call.
 const SHEET_NAMES = SHEET_NAMES_STR.split(',').map(name => name.trim());
 
+// The 'scope' tells Google what permissions we are requesting. 'readonly' means we can only view sheets, not change them.
 const SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly'];
 
+/**
+ * Creates an authenticated Google Auth client.
+ */
 async function getAuthClient() {
   const auth = new google.auth.GoogleAuth({
     keyFile: CREDENTIALS_PATH,
@@ -27,15 +47,16 @@ async function getAuthClient() {
 }
 
 /**
- * Fetches data from multiple sheets and returns it as an object
- * where keys are the sheet names.
- * @returns {Promise<Object>} e.g., { "Sheet1": [...], "Sheet2": [...] }
+ * Fetches data from all sheets listed in the SHEET_NAMES variable.
+ * It uses the first row of each sheet as a header to create structured JSON data.
+ * @returns {Promise<Object>} An object where each key is a sheet name and the value is an array of data rows.
  */
 async function getSheetData() {
   try {
     const authClient = await getAuthClient();
     const sheets = google.sheets({ version: 'v4', auth: authClient });
 
+    // Use `batchGet` to fetch multiple sheets in a single, efficient API call.
     const response = await sheets.spreadsheets.values.batchGet({
       spreadsheetId: SPREADSHEET_ID,
       ranges: SHEET_NAMES,
@@ -49,12 +70,12 @@ async function getSheetData() {
 
     const allSheetData = {};
 
+    // Process the results for each sheet.
     valueRanges.forEach(rangeResult => {
-      // Get clean sheet name. The range can be 'Sheet1!A1:Z1000' or just 'Sheet1'.
       const sheetName = rangeResult.range.split('!')[0].replace(/'/g, ''); 
       const rows = rangeResult.values;
 
-      if (rows && rows.length > 0) {
+      if (rows && rows.length > 1) { // We need at least a header row and one data row.
         const header = rows[0];
         const dataRows = rows.slice(1);
 
@@ -62,27 +83,27 @@ async function getSheetData() {
           const rowData = {};
           if (row) {
             header.forEach((key, index) => {
-              // Sanitize key to be a valid JS identifier
+              // Sanitize header key to be a valid JS object key.
               const sanitizedKey = typeof key === 'string' ? key.toLowerCase().replace(/[^a-zA-Z0-9_]/g, '') : `column_${index}`;
               rowData[sanitizedKey] = row[index];
             });
           }
           return rowData;
-        }).filter(obj => Object.keys(obj).length > 0);
+        }).filter(obj => Object.keys(obj).length > 0); // Filter out any completely empty rows.
         
         allSheetData[sheetName] = data;
       } else {
-        console.log(`Sheet "${sheetName}" is empty or has no data.`);
-        allSheetData[sheetName] = []; // Add empty array for sheets with no data
+        allSheetData[sheetName] = []; // Add an empty array for sheets with no data rows.
       }
     });
 
     return allSheetData;
 
   } catch (error) {
-    console.error('Detailed error from Google Sheets API:', error);
+    console.error('Detailed error from Google Sheets API:', error.message);
     throw new Error('Could not retrieve data from Google Sheets.');
   }
 }
 
+// Makes the getSheetData function available to be used in other files like index.js.
 module.exports = { getSheetData };
